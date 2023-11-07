@@ -1,0 +1,5 @@
+vpc_cidr = "192.168.0.0/16"
+environment = "dev"
+subnet_impex_aus_cidr = "192.168.1.0/24"
+azs = "ap-southeast-2b"
+aws_region = "ap-southeast-2"

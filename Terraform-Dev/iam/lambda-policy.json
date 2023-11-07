@@ -1,0 +1,29 @@
+{
+    "Version": "2012-10-17",
+    "Statement": [
+      {
+        "Sid": "Stmt1694588234504",
+        "Action": [
+          "logs:CreateLogDelivery",
+          "logs:CreateLogGroup",
+          "logs:CreateLogStream",
+          "logs:DeleteLogDelivery",
+          "logs:DeleteLogGroup",
+          "logs:DeleteLogStream",
+          "logs:FilterLogEvents",
+          "logs:GetLogDelivery",
+          "logs:GetLogEvents",
+          "logs:GetLogGroupFields",
+          "logs:GetLogRecord",
+          "logs:ListLogDeliveries",
+          "logs:ListTagsLogGroup",
+          "logs:PutLogEvents",
+          "logs:TagLogGroup",
+          "logs:UntagLogGroup",
+          "logs:UpdateLogDelivery"
+        ],
+        "Effect": "Allow",
+        "Resource": "*"
+      }
+    ]
+  }

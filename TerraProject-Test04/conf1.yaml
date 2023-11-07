@@ -1,0 +1,25 @@
+aws_region:
+  type: string
+  description: null
+  default: ap-southeast-2
+  required: false
+az:
+  type: string
+  description: null
+  default: ap-southeast-2b
+  required: false
+environment:
+  type: string
+  description: null
+  default: dev
+  required: false
+subnet_impex_aus_cidr:
+  type: string
+  description: CIDR block for Public Subnet
+  default: 192.168.1.0/24
+  required: false
+vpc_cidr:
+  type: string
+  description: CIDR block of the vpc
+  default: 192.168.0.0/16
+  required: false

@@ -1,0 +1,105 @@
+AWSTemplateFormatVersion: 2010-09-09
+
+## Prompts the user to choose the Environment Type
+
+Resources:
+  TaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      ExecutionRoleArn: "arn:aws:iam::266842636661:role/ecsTaskExecutionRole"
+      RequiresCompatibilities:
+        - "FARGATE"
+      Cpu: 256
+      Memory: 512
+      NetworkMode: "awsvpc"
+      ContainerDefinitions:
+        - Name: "impex-c1"
+          Image: "266842636661.dkr.ecr.us-east-1.amazonaws.com/myapp4:v1"
+          MemoryReservation: 256
+          Memory: 512
+          PortMappings:
+            - ContainerPort: 80
+              Protocol: tcp
+  ECSCluster:
+    Type: 'AWS::ECS::Cluster'
+    Properties:
+      ClusterName: Impex-Cluster
+
+  FargateAlb:
+    Type: 'AWS::ElasticLoadBalancingV2::LoadBalancer'
+    Properties:
+      Name: FargateAlb
+      SecurityGroups:
+        - !GetAtt FargateAlbSG.GroupId
+      Subnets:
+        - subnet-6b723c0c
+        - subnet-4fbbf013
+        - subnet-7e7a2f50
+      Type: application
+
+  FargateTargetGroup:
+    Type: 'AWS::ElasticLoadBalancingV2::TargetGroup'
+    Properties:
+      Name: FargateTargetGroup
+      VpcId: vpc-19c15b63
+      Protocol: HTTP
+      Port: 8080
+      HealthCheckPath: /actuator/
+      TargetType: ip
+
+  Listener:
+    Type: 'AWS::ElasticLoadBalancingV2::Listener'
+    Properties:
+      DefaultActions:
+        - TargetGroupArn: !Ref FargateTargetGroup
+          Type: forward
+      LoadBalancerArn: !Ref FargateAlb
+      Port: 80
+      Protocol: HTTP
+
+  FargateAlbSG:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: SG for the Fargate ALB
+      GroupName: FargateAlbSG
+      SecurityGroupIngress:
+        - CidrIp: 0.0.0.0/0
+          FromPort: 80
+          ToPort: 80
+          IpProtocol: TCP
+          Description: 'Inbound rule for IPv4 traffic'
+
+
+  Alb2FargateContainers:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: SG for traffic between ALB and containers
+      GroupName: Alb2FargateContainers
+      SecurityGroupIngress:
+        - IpProtocol: -1
+          SourceSecurityGroupId: !GetAtt FargateAlbSG.GroupId
+          Description: 'Inbound rule for all traffic'
+
+  ECSService:
+    Type: AWS::ECS::Service
+    Properties:
+      LaunchType: FARGATE
+      Cluster:
+        Ref: "ECSCluster"
+      DesiredCount: 4
+      TaskDefinition:
+        Ref: "TaskDefinition"
+      DeploymentConfiguration:
+        MaximumPercent: 100
+        MinimumHealthyPercent: 0
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: ENABLED
+          SecurityGroups:
+            - !GetAtt Alb2FargateContainers.GroupId
+          Subnets: ['subnet-6b723c0c','subnet-4fbbf013','subnet-7e7a2f50']
+      LoadBalancers:
+        - TargetGroupArn:
+            Ref: FargateTargetGroup
+          ContainerPort: 8080
+          ContainerName: impex-c1

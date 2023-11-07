@@ -1,0 +1,314 @@
+
+
+AWSTemplateFormatVersion: 2010-09-09
+
+## Prompts the user to choose the Environment Type
+
+Parameters:
+  EnvironmentType:
+    Description: "Specify the Environment type of the stack."
+    Type: String
+    Default: staging
+    AllowedValues:
+      - staging
+      - prod
+
+Mappings:
+  EnvironmentToInstanceType:
+    staging:
+      InstanceType: t3.nano
+    prod:
+      InstanceType: t3.micro
+
+Resources:
+
+#Creating the Key pair for Australia 
+
+  ImpexKeyAus:
+    Type: 'AWS::EC2::KeyPair'
+    Properties: 
+      KeyName: ImpexKeyPairAus
+
+#Creating the VPC for Australia
+  VPCIMPEXAUS:
+    Type: 'AWS::EC2::VPC'
+    Properties:
+      CidrBlock: 10.10.0.0/16
+      EnableDnsSupport: yes
+      EnableDnsHostnames: yes
+
+#Creating Internet Gateway
+  IGWIMPEXAUS:
+    Type: 'AWS::EC2::InternetGateway'
+
+#Attaching the ITG to the VPC
+  InternetGatewayAttachment:
+    Type: 'AWS::EC2::VPCGatewayAttachment'
+    Properties:
+      VpcId: !Ref VPCIMPEXAUS
+      InternetGatewayId: !Ref IGWIMPEXAUS
+
+#Creating Subnet for Australia 
+  SubnetImpexAUS:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      VpcId: !Ref VPCIMPEXAUS
+      AvailabilityZone: ap-southeast-2a
+      CidrBlock: 10.10.1.0/24
+
+
+#Creating a Route Table
+  RouteTableImpexAUS:
+    Type: 'AWS::EC2::RouteTable'
+    Properties:
+      VpcId: !Ref VPCIMPEXAUS
+
+#Configuring Route
+  RouteImpexAUS:
+    Type: 'AWS::EC2::Route'
+    Properties:
+      RouteTableId: !Ref RouteTableImpexAUS
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref IGWIMPEXAUS
+
+#Associating Subnet  and Route Table  
+  SubnetRouteTableAssociation:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      RouteTableId: !Ref RouteTableImpexAUS
+      SubnetId: !Ref SubnetImpexAUS
+
+
+#Creating Security Group
+  SGIMPEXAUS:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupName: !Join ["-", [IMPEX-AUS, !Ref EnvironmentType]]
+      GroupDescription: Enable SSH access and HTTP 
+      VpcId: !Ref VPCIMPEXAUS
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+
+# Attach Existing IAM role for System Manager
+  Ec2InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Path: /
+      Roles: [ !Ref Ec2InstanceRole ]
+  Ec2InstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: 
+                     - "ec2.amazonaws.com"        
+            Action:
+              - sts:AssumeRole
+      Path: /
+      Policies:
+        - PolicyName: impex-aus-iam
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:  
+                      - "ec2:RunInstances"
+                      - "ec2:AssociateIamInstanceProfile"
+                      - "ec2:ReplaceIamInstanceProfileAssociation"
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                      - "iam:ListInstanceProfiles"
+                      - "iam:PassRole"
+                Resource: '*' 
+              - Effect: Allow
+                Action: 
+                      - "ssm:DescribeAssociation"
+                      - "ssm:GetDeployablePatchSnapshotForInstance"
+                      - "ssm:GetDocument"
+                      - "ssm:DescribeDocument"
+                      - "ssm:GetManifest"
+                      - "ssm:GetParameter"
+                      - "ssm:GetParameters"
+                      - "ssm:ListAssociations"
+                      - "ssm:ListInstanceAssociations"
+                      - "ssm:PutInventory"
+                      - "ssm:PutComplianceItems"
+                      - "ssm:PutConfigurePackageResult"
+                      - "ssm:UpdateAssociationStatus"
+                      - "ssm:UpdateInstanceAssociationStatus"
+                      - "ssm:UpdateInstanceInformation"
+                Resource: '*' 
+              - Effect: Allow
+                Action: 
+                      - "ssmmessages:CreateControlChannel"
+                      - "ssmmessages:CreateDataChannel"
+                      - "ssmmessages:OpenControlChannel"
+                      - "ssmmessages:OpenDataChannel"
+                Resource: '*'
+              - Effect: Allow
+                Action: 
+                      - "ec2messages:AcknowledgeMessage"
+                      - "ec2messages:DeleteMessage"
+                      - "ec2messages:FailMessage"
+                      - "ec2messages:GetEndpoint"
+                      - "ec2messages:GetMessages"
+                      - "ec2messages:SendReply"
+                Resource: '*'
+
+# Create IAM role for Backup
+  EC2BackupRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: "Allow"
+            Principal:
+              Service:
+                - "backup.amazonaws.com"
+            Action:
+              - "sts:AssumeRole"
+      ManagedPolicyArns:
+        - "arn:aws:iam::aws:policy/service-role/AWSBackupServiceRolePolicyForBackup"
+
+# Create Backup Vault Key
+
+  ImpexAusKMSKey:
+    Type: AWS::KMS::Key
+    Properties:
+      Description: "Encryption key for daily"
+      EnableKeyRotation: True
+      Enabled: True
+      KeyPolicy:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              "AWS": { "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:root" }
+            Action:
+              - kms:*
+            Resource: "*" 
+
+# Create Backup Vault
+
+  ImpexBackupVault:
+    Type: "AWS::Backup::BackupVault"
+    Properties:
+      BackupVaultName: "ImpexBackupVault"
+      EncryptionKeyArn: !GetAtt ImpexAusKMSKey.Arn
+
+# Create Backup Plan
+
+  ImpexBackupPlanWithDailyBackups:
+    Type: "AWS::Backup::BackupPlan"
+    Properties:
+      BackupPlan:
+        BackupPlanName: "ImpexBackupPlanWithDailyBackups"
+        BackupPlanRule:
+          -
+            RuleName: "RuleForDailyBackups"
+            TargetBackupVault: !Ref ImpexBackupVault
+            ScheduleExpression: "cron(0 * ? * * *)"
+            StartWindowMinutes: 60
+            CompletionWindowMinutes: 300
+
+
+    DependsOn: ImpexBackupVault
+
+# Create Backup Selection
+
+  EC2BasedBackupSelection:
+    Type: "AWS::Backup::BackupSelection"
+    Properties:
+      BackupSelection:
+        SelectionName: "EC2BasedBackupSelection"
+        IamRoleArn: !GetAtt EC2BackupRole.Arn
+        Resources: 
+          - 'arn:aws:ec2:*:*:instance/*'
+        ListOfTags:
+          - ConditionType: "STRINGEQUALS"
+            ConditionKey: "backup"
+            ConditionValue: "true"
+      BackupPlanId: !Ref ImpexBackupPlanWithDailyBackups
+    DependsOn: ImpexBackupPlanWithDailyBackups
+              
+# Create Ec2 Instance
+  EC2Instance:
+      Type: AWS::EC2::Instance
+      Properties:
+        ImageId: ami-0310483fb2b488153
+        InstanceType: !FindInMap [
+          EnvironmentToInstanceType,
+          !Ref EnvironmentType,
+          InstanceType,
+        ]
+        Tags:
+          - Key: Name
+            Value: Impex-Aus
+          - Key: backup
+            Value: true
+           
+        KeyName: !Ref ImpexKeyAus
+        BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs:
+            VolumeType: gp2
+            VolumeSize: '30'
+            DeleteOnTermination: 'true'
+            Encrypted: 'true'
+        - DeviceName: /dev/sda1
+          Ebs:
+            VolumeType: gp2
+            VolumeSize: '40'
+            DeleteOnTermination: 'true'
+            Encrypted: 'true'
+        IamInstanceProfile: !Ref Ec2InstanceProfile
+        NetworkInterfaces:
+          - AssociatePublicIpAddress: "true"
+            DeviceIndex: "0"
+            GroupSet:
+              - Ref: SGIMPEXAUS
+            SubnetId:
+              Ref: SubnetImpexAUS
+   
+
+
+  
+# Configuring Elastic IP
+  EIPImpexAUS:
+    Type: AWS::EC2::EIP
+    Properties: 
+      Domain: vpc
+
+  ENIASSIMPEXAUS:
+    Type: AWS::EC2::EIPAssociation
+    Properties:
+      InstanceId: !Ref EC2Instance
+      EIP: !Ref EIPImpexAUS
+
+
+
+        
+        
+
+
+
+
+
+
+
+

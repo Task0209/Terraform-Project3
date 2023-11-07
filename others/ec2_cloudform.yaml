@@ -1,0 +1,26 @@
+AWSTemplateFormatVersion: 2010-09-09
+
+Description: This template creates an EC2 instance which enables SSH connection.  # This is a Comment line
+
+Resources: 
+  EC2Instance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: ami-053b0d53c279acc90
+      InstanceType: t3.micro
+      KeyName: ecsec2key
+      SecurityGroupIds:
+        - !Ref InstanceSecurityGroup
+
+
+  InstanceSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: Cloud-SG
+      GroupDescription: Security group for My Test Machine
+      VpcId: vpc-19c15b63
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0

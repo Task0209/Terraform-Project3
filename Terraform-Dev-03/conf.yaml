@@ -1,0 +1,16 @@
+kms:
+  impex_user_arn: "arn:aws:iam::266842636661:user/ubuntu"
+  key_spec: "SYMMETRIC_DEFAULT"
+  usage: "ENCRYPT_DECRYPT"
+  enabled: "true"
+  rotation_enabled: "true"
+regions:
+  region1: "ap-southeast-2"
+environment:
+  name: "dev"
+secrets:
+ impex-gatepass:
+   pass1: "WZ8U3nuBIKl@6QP"
+   pass2: "P@8V8ELncWjSRxP"
+   sensitive: "true"
+
